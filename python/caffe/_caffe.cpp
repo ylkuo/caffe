@@ -53,6 +53,14 @@ void set_mode_gpu() { Caffe::set_mode(Caffe::GPU); }
 
 void set_random_seed(unsigned int seed) { Caffe::set_random_seed(seed); }
 
+#ifndef CPU_ONLY
+int get_cuda_num_threads() { return CAFFE_CUDA_NUM_THREADS; }
+#endif
+
+bp::object cublas_handle() {
+  return bp::object((size_t)Caffe::cublas_handle());
+}
+
 // For convenience, check that input files can be opened, and raise an
 // exception that boost will send to Python if not (caffe could still crash
 // later if the input files are disturbed before they are actually used, but
@@ -238,6 +246,16 @@ bp::object Blob_Reshape(bp::tuple args, bp::dict kwargs) {
   return bp::object();
 }
 
+#ifndef CPU_ONLY
+size_t Blob_GpuDataPtr(Blob<Dtype>* self) {
+  return (size_t)(self->mutable_gpu_data());
+}
+
+size_t Blob_GpuDiffPtr(Blob<Dtype>* self) {
+  return (size_t)(self->mutable_gpu_diff());
+}
+#endif
+
 bp::object BlobVec_add_blob(bp::tuple args, bp::dict kwargs) {
   if (bp::len(kwargs) > 0) {
     throw std::runtime_error("BlobVec.add_blob takes no kwargs");
@@ -289,6 +307,12 @@ BOOST_PYTHON_MODULE(_caffe) {
   bp::def("set_device", &Caffe::SetDevice);
 
   bp::def("layer_type_list", &LayerRegistry<Dtype>::LayerTypeList);
+
+#ifndef CPU_ONLY
+  bp::def("get_cuda_num_threads", &get_cuda_num_threads);
+  bp::def("get_blocks", &CAFFE_GET_BLOCKS);
+  bp::def("cublas_handle", &cublas_handle);
+#endif
 
   bp::class_<Net<Dtype>, shared_ptr<Net<Dtype> >, boost::noncopyable >("Net",
     bp::no_init)
@@ -347,6 +371,10 @@ BOOST_PYTHON_MODULE(_caffe) {
     .add_property("count",    static_cast<int (Blob<Dtype>::*)() const>(
         &Blob<Dtype>::count))
     .def("reshape",           bp::raw_function(&Blob_Reshape))
+#ifndef CPU_ONLY
+    .add_property("gpu_data_ptr", &Blob_GpuDataPtr)
+    .add_property("gpu_diff_ptr", &Blob_GpuDiffPtr)
+#endif
     .add_property("data",     bp::make_function(&Blob<Dtype>::mutable_cpu_data,
           NdarrayCallPolicies()))
     .add_property("diff",     bp::make_function(&Blob<Dtype>::mutable_cpu_diff,
